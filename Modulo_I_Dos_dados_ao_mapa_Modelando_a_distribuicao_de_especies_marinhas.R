@@ -112,33 +112,6 @@ nrow(sp_toninha)      # Conta registros após limpeza
 
 # ---------------------------------------------------------------------------- #
 
-# Plot do mapa global com os pontos
-g2 <- ggplot() +
-  geom_polygon(
-    data = world_map,
-    aes(x = long, y = lat, group = group),
-    fill = "gray95",
-    color = "gray60",
-    linewidth = 0.2
-  ) +
-  geom_point(
-    data = sp_toninha,
-    aes(x = lon, y = lat),
-    color = "red",
-    size = 2
-  ) +
-  coord_fixed(1.3) +
-  labs(
-    title = "Ocorrências de Pontoporia blainvillei",
-    x = "Longitude",
-    y = "Latitude"
-  ) +
-  theme_minimal()
-
-g2
-
-# ---------------------------------------------------------------------------- #
-
 # 02. Obter mapa da área de estudo (shapefile) -----
 
 #install.packages("sf")
@@ -358,6 +331,16 @@ toninha_sem_na <- na.omit(toninha_concat) # Excluir NAs
 
 nrow(toninha_sem_na)
 
+write_xlsx(
+  toninha_sem_na,
+  "toninha_sem_na.xlsx"
+)
+
+# ---------------------------------------------------------------------------- #
+
+# Remove os dois pontos indesejados
+toninha_sem_na <- toninha_sem_na[-c(103, 107), ]
+
 # ---------------------------------------------------------------------------- #
 
 # Plotar Shapefile recortado
@@ -378,63 +361,10 @@ points(toninha_sem_na$lon, toninha_sem_na$lat,
 
 # ---------------------------------------------------------------------------- #
 
-# 05. Espacializar as ocorrências -----
-
-#install.packages("spThin")
-
-library(spThin)    # Realiza o "thinning" espacial, reduzindo a autocorrelação espacial em dados de ocorrência
-
-head(toninha_sem_na)
-
-### Espacialização geográfica -----
-toninha_thin <- thin(
-  loc.data = toninha_sem_na,                        # Dataframe de ocorrências filtrado
-  lat.col = "lat",                              # Coluna com latitude
-  long.col = "lon",                            # Coluna com longitude
-  spec.col = "species",                         # Coluna com o nome da espécie
-  thin.par = 30,                               # Distância mínima (km) entre pontos
-  reps = 100,                                   # Quantas vezes repetir o processo
-  locs.thinned.list.return = TRUE,              # Retorna lista com resultados de cada repetição
-  write.files = FALSE,                          # Não salva arquivos automaticamente
-  write.log.file = FALSE                        # Não cria arquivo de log
-)
-
-# Número de pontos em cada repetição
-n_locs <- sapply(toninha_thin, nrow)
-
-# Repetição com maior número de ocorrências
-toninha_thin <- toninha_thin[[which.max(n_locs)]]
-
-nrow(toninha_thin)                                             # Mostra número de registros
+nrow(toninha_sem_na)
 nrow(sp_toninha)
 nrow(sp_toninha_full)
 
-toninha_thin                                                   # Visualiza tabela final
-str(toninha_thin)
-
-write_xlsx(
-  toninha_thin,
-  "toninha_thin.xlsx"
-)
-
 # ---------------------------------------------------------------------------- #
 
-# Plotar Shapefile recortado
-plot(oceans_cropped, col = "lightblue")
-plot(eez_cropped, add=TRUE)
-
-# Adicionar eixos y
-valores_y <- c(20, 10, 0, -10, -20, -30, -40, -50, -60, -70, -80, -90)
-axis(2, at = valores_y)
-# Adicionar eixo x
-valores_x <- c(-90, -80, -70, -60, -50, -40, -30, -20)
-axis(1, at = valores_x)
-
-points(toninha_thin$Longitude, toninha_thin$Latitude,
-       pch = 16,
-       col = "red",
-       cex = 1)
-
-# ---------------------------------------------------------------------------- #
-
-# 05. Espacializar as ocorrências -----
+# 05. Gerar as ausências/pseudoausências -----
