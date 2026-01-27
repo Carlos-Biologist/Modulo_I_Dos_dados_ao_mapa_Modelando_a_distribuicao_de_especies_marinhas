@@ -520,7 +520,366 @@ valores_x <- c(-90, -80, -70, -60, -50, -40, -30, -20)
 axis(1, at = valores_x)
 
 # ---------------------------------------------------------------------------- #
+
 write_xlsx(
   toninha_final,
   path = "dados_toninha_final.xlsx"
 )
+
+# ---------------------------------------------------------------------------- #
+
+# 06. Verificar colinearidade -----
+
+#install.packages("psych")
+
+library(psych) # Colinearidade
+
+toninha_colin <- toninha_final %>%
+  dplyr::select(-phyc_mean, -no3_mean, -po4_mean, -o2_mean, -ph_mean, -dfe_mean)
+
+pairs.panels(
+  toninha_colin,
+  cex = 6,        # tamanho geral da fonte (números, correlações)
+  cex.labels = 1.5 # tamanho dos nomes das variáveis
+)
+
+# ---------------------------------------------------------------------------- #
+
+# 07. Verificar colinearidade -----
+
+#library(devtools)
+#devtools::install_github("biomodhub/biomod2", dependencies = TRUE)
+
+library(biomod2)
+
+# https://cran.r-project.org/web/packages/biomod2/biomod2.pdf
+
+# ---------------------------------------------------------------------------- #
+
+# Dados de presença / ausência -----
+
+toninha_final <- read_xlsx("dados_toninha_final.xlsx")
+
+toninha_colin <- toninha_final %>%
+  dplyr::select(-phyc_mean, -no3_mean, -po4_mean, -o2_mean, -ph_mean, -dfe_mean)
+
+# Checagens básicas
+str(toninha_colin)
+summary(toninha_colin)
+
+# ---------------------------------------------------------------------------- #
+
+# Nome da espécie
+myResp <- toninha_colin$species
+myRespName <- "species"
+
+# Coordenadas (data.frame simples)
+myRespXY <- toninha_colin[, c("lon", "lat")]
+
+# ---------------------------------------------------------------------------- #
+
+# Dados ambientais -----
+
+# Empilhar os RasterLayer em um RasterStack
+bio_colin <- stack(chl_surf_raster, mld_surf_raster, tsm_surf_raster, sal_surf_raster, swd_surf_raster, sws_surf_raster, 
+             bathy_raster, silicate_surf_raster)
+
+# Converter Brick → Stack
+bio_colin <- raster::stack(bio_colin)
+
+bio_colin
+
+# ---------------------------------------------------------------------------- #
+
+# Formatação BIOMOD (com ausências reais) -----
+
+myBiomodData <- BIOMOD_FormatingData(
+  resp.var  = myResp,              # ✅ vetor 0/1
+  expl.var  = bio_colin,
+  resp.xy   = myRespXY,
+  resp.name = myRespName
+)
+
+myBiomodData
+myBiomodData@coord
+head(myBiomodData@data.env.var)
+plot(myBiomodData)
+
+# ---------------------------------------------------------------------------- #
+
+ModelsTable # Visualizar algoritmos
+
+#allModels <- c('ANN', 'CTA', 'DNN', 'FDA', 'GAM', 'GBM', 'GLM', 'MARS'
+#               , 'MAXENT', 'MAXNET', 'RF', 'RFd', 'SRE', 'XGBOOST')
+
+allModels <- c('GAM', 'GLM', 'RF', 'XGBOOST')
+
+toninha_opt <- bm_ModelingOptions(
+  data.type = 'binary',
+  models = allModels,
+  strategy = 'default',
+  bm.format = myBiomodData
+)
+
+toninha_model <- BIOMOD_Modeling(
+  bm.format    = myBiomodData,
+  modeling.id = 'AllModels',
+  models      = c('GAM','GLM','RF','XGBOOST'),
+  CV.strategy = 'block',    # validação cruzada espacial (em blocos)
+  CV.perc     = 0.8,
+  OPT.strategy = 'default',
+  metric.eval = c('TSS','AUCroc'),
+  var.import  = 3,
+  seed.val    = 42
+)
+
+# ---------------------------------------------------------------------------- #
+
+# Obter scores de avaliação e importância das variáveis
+
+bm_PlotEvalMean(
+  toninha_model,
+  metric.eval = c('TSS','AUCroc'),
+  dataset = "validation",
+  group.by = "algo",
+  do.plot = TRUE
+)
+
+# ---------------------------------------------------------------------------- #
+
+toninha_model_var_imp <- get_variables_importance(toninha_model)
+
+# Calcula a média da importância das variáveis pelas colunas "expl.var"
+mean_var_imp <- aggregate(var.imp ~ expl.var, data = toninha_model_var_imp, FUN = mean)
+
+# Exibe o resultado
+print(mean_var_imp)
+
+# Ordena o dataframe mean_var_imp do mais importante para o menos importante
+mean_var_imp <- mean_var_imp[order(mean_var_imp$var.imp, decreasing = TRUE), ]
+
+# Gera o gráfico de barras invertido
+barplot(mean_var_imp$var.imp, names.arg = mean_var_imp$expl.var, 
+        xlab = "Variáveis Explicativas", ylab = "Importãncia",
+        col = "blue")
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+
+## then call Projection function
+toninha_projection <- BIOMOD_Projection(toninha_model,
+                                        new.env = bio_colin,
+                                        proj.name = 'current_new',
+                                        selected.models = 'all',
+                                        compress = FALSE,
+                                        build.clamping.mask = FALSE)
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+
+mods <- get_built_models(toninha_model)
+
+toninha_ens <- BIOMOD_EnsembleModeling(
+  toninha_model,
+  models.chosen = mods,
+  em.by = "all",
+  em.algo = c('EMmean'),
+  metric.select = c('TSS'),
+  metric.select.thresh = 0.8,
+  metric.eval = c("TSS", "AUCroc"),
+  var.import = 11,
+  EMci.alpha = 0.05,
+  EMwmean.decay = "proportional",
+  nb.cpu = 2,
+  seed.val = 123,
+  do.progress = TRUE,
+)
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+
+rcurve_australis_ens <- 
+  bm_PlotResponseCurves(
+    toninha_ens,
+    models.chosen = get_built_models(toninha_ens),
+    new.env = get_formal_data(toninha_ens, "expl.var"),
+    show.variables = get_formal_data(toninha_ens, "expl.var.names"),
+    do.bivariate = FALSE,
+    fixed.var = "mean",
+    do.plot = TRUE,
+    do.progress = TRUE)
+
+# Get evaluation scores & variables importance
+get_evaluations(toninha_ens)
+
+get_variables_importance(toninha_ens)
+
+# # Represent variables importance
+bm_PlotVarImpBoxplot(bm.out = toninha_ens, group.by = c('expl.var', 'algo', 'algo'))
+
+# Caminho para o arquivo
+caminho_arquivo <- "C:/Fernando_Modelagem australis/sdm_australis_fernando/sp.cod/proj_current_new/proj_current_new_sp.cod.tif"
+
+# Carregar a imagem TIFF
+imagem_tiff <- raster(caminho_arquivo)
+
+# Visualizar a imagem
+plot(imagem_tiff, col = pal1)
+
+atual <- imagem_tiff / 1000
+
+# Visualizar a imagem
+plot(atual, col = pal1)
+plot(eez_cropped, add = TRUE)
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+
+toninha_ens_ens <- BIOMOD_EnsembleForecasting(toninha_ens,
+                                              projection.output = toninha_projection,
+                                              new.env = bio_cropped,
+                                              selected.models = 'all',
+                                              proj.name = "ensemble_new_current",
+                                              binary.meth = "TSS")
+# Caminho para o arquivo
+caminho_arquivo_ens <- "C:/Fernando_Modelagem australis/sdm_australis_fernando/sp.cod/proj_ensemble_new_current/proj_ensemble_new_current_sp.cod_ensemble.tif"
+
+# Carregar a imagem TIFF
+imagem_tiff_ens <- raster(caminho_arquivo_ens)
+
+# Visualizar a imagem
+plot(imagem_tiff_ens, col = pal1)
+
+atual_ens <- imagem_tiff_ens / 1000
+
+# Visualizar a imagem
+plot(atual_ens, col = pal1)
+#plot(eez_cropped, add = TRUE)
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+
+# Extrair as coordenadas de myBiomodData
+coordenadas <- myBiomodData@coord
+
+# Extrair os valores do raster nas coordenadas
+valores_extraidos <- extract(atual_ens, coordenadas)
+
+# Visualizar os primeiros valores extraídos
+head(valores_extraidos)
+
+# Se desejar salvar esses valores em um arquivo .xlsx, use o pacote openxlsx
+
+# Criar um dataframe com as coordenadas e os valores extraídos
+dados_extraidos <- data.frame(coordenadas, valores_extraidos)
+
+head(dados_extraidos)
+
+# Salvar os dados em um arquivo .xlsx
+write.xlsx(dados_extraidos, file = "valores_extraidos_ensemble.xlsx")
+
+## Download ou carregamento das ocorrências -----
+adequab <- readxl::read_excel("australis_env_var.xlsx")
+
+head(adequab)
+summary(adequab)
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+
+# Crie o gráfico de "curva de resposta"
+ggplot(adequab, aes(x = chl_mean, y = Adequabilidade)) +
+  geom_point() + 
+  geom_smooth(method = "loess") + 
+  labs(x = "Chl-a",
+       y = "Adequabilidade") +
+  ylim(0, 1.12) +
+  theme_gray()
+
+# Crie o gráfico de "curva de resposta"
+ggplot(adequab, aes(x = dfe_mean, y = Adequabilidade)) +
+  geom_point() + 
+  geom_smooth(method = "loess") + 
+  labs(x = "Ferro Dissolvido",
+       y = "Adequabilidade") +
+  ylim(0, 1) +
+  theme_gray()
+
+# Crie o gráfico de "curva de resposta"
+ggplot(adequab, aes(x = bathymetry_mean, y = Adequabilidade)) +
+  geom_point() + 
+  geom_smooth(method = "loess") + 
+  labs(x = "Batimetria",
+       y = "Adequabilidade") +
+  ylim(0, 1) +
+  theme_gray()
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+
+# Defina uma função para remover outliers usando o método do IQR
+remove_outliers <- function(df, col_name) {
+  Q1 <- quantile(df[[col_name]], 0.25, na.rm = TRUE)
+  Q3 <- quantile(df[[col_name]], 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  df[df[[col_name]] >= lower_bound & df[[col_name]] <= upper_bound, ]
+}
+
+# Remova os outliers da variável "so_mean.2"
+adequab_clean_chl <- remove_outliers(adequab, "chl_mean")
+
+# Crie o gráfico de "curva de resposta" sem os outliers na variável x
+chl <- ggplot(adequab_clean_chl, aes(x = chl_mean, y = Adequabilidade)) +
+  #geom_point() + 
+  geom_smooth(method = "loess") + 
+  geom_hline(yintercept = 0.5, linetype = "dashed") +  # Adiciona linha pontilhada em y = 0.5
+  labs(x = "Chl-a",
+       y = "Adequabilidade") +
+  theme_classic() +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) +
+  scale_x_continuous(breaks = seq(0, 3.0, by = 0.2))
+
+plot(chl)
+
+# Remova os outliers da variável "so_mean.2"
+adequab_clean_iron <- remove_outliers(adequab, "dfe_mean")
+
+# Crie o gráfico de "curva de resposta" sem os outliers na variável x
+iron <- ggplot(adequab_clean_iron, aes(x = dfe_mean, y = Adequabilidade)) +
+  #geom_point() + 
+  geom_smooth(method = "loess") + 
+  geom_hline(yintercept = 0.5, linetype = "dashed") +  # Adiciona linha pontilhada em y = 0.5
+  labs(x = "Ferro dissolvido",
+       y = "Adequabilidade") +
+  theme_classic() +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2))
+
+plot(iron)
+
+# Remova os outliers da variável "so_mean.2"
+adequab_clean_bathy <- remove_outliers(adequab, "bathymetry_mean")
+
+# Crie o gráfico de "curva de resposta" sem os outliers na variável x
+bathy <- ggplot(adequab_clean_bathy, aes(x = bathymetry_mean, y = Adequabilidade)) +
+  #geom_point() + 
+  geom_smooth(method = "loess") + 
+  geom_hline(yintercept = 0.5, linetype = "dashed") +  # Adiciona linha pontilhada em y = 0.5
+  labs(x = "Batimetria",
+       y = "Adequabilidade") +
+  theme_classic() +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2))
+
+plot(bathy)
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+
+library(gridExtra)
+
+# Combine os gráficos em um painel 2x2
+grid.arrange(chl, iron, bathy, ncol = 3)
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
