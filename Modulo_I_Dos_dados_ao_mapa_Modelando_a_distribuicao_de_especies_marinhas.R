@@ -24,13 +24,11 @@ options(scipen = 999) # remover notação científica dos dados
 # ---------------------------------------------------------------------------- #
 # ---------------------------------------------------------------------------- #
 
-#install.packages("spThin")
 #install.packages("raster")
 #install.packages("tidyverse")
 #install.packages("dplyr")
 #install.packages("dismo")
 
-library(spThin)    # Realiza o "thinning" espacial, reduzindo a autocorrelação espacial em dados de ocorrência
 library(raster)    # Manipulação, análise e visualização de dados espaciais no formato raster
 library(tidyverse) # Conjunto de pacotes para manipulação, visualização e análise de dados (ggplot2, dplyr, tidyr, etc.)
 library(dplyr)     # Manipulação de dados (selecionar colunas, filtrar linhas, criar variáveis, agrupar, sumarizar)
@@ -39,10 +37,10 @@ pal1 <- c("#3E49BB", "#3498DB", "yellow", "orange", "red", "darkred") # paleta d
 
 # ---------------------------------------------------------------------------- #
 
-# 01. Obter dados presença e processar dados ambientais e bióticos -----
+# 01. Obter dados presença -----
 
 ## Download ou carregamento das ocorrências -----
-sp_toninha <- dismo::gbif(
+sp_toninha_full <- dismo::gbif(
   genus = "Pontoporia",           # Define o gênero da espécie a buscar no GBIF
   species = "blainvillei",        # Define a espécie
   geo = TRUE,                     # Filtra apenas registros com coordenadas (lat/long)
@@ -52,19 +50,53 @@ sp_toninha <- dismo::gbif(
 
 # ---------------------------------------------------------------------------- #
 
+# Carrega pacotes
+library(ggplot2)
+library(maps)
+
+# Dados do mapa mundial (sem filtro)
+world_map <- map_data("world")
+
+# Plot do mapa global com os pontos
+g1 <- ggplot() +
+  geom_polygon(
+    data = world_map,
+    aes(x = long, y = lat, group = group),
+    fill = "gray95",
+    color = "gray60",
+    linewidth = 0.2
+  ) +
+  geom_point(
+    data = sp_toninha_full,
+    aes(x = lon, y = lat),
+    color = "red",
+    size = 2
+  ) +
+  coord_fixed(1.3) +
+  labs(
+    title = "Ocorrências de Pontoporia blainvillei",
+    x = "Longitude",
+    y = "Latitude"
+  ) +
+  theme_minimal()
+
+g1
+
+# ---------------------------------------------------------------------------- #
+
 # sp_toninha <- read.csv("nome do arquivo.csv")             # Alternativa: ler ocorrências de um arquivo CSV
 # sp_toninha <- readxl::read_excel("nome do arquivo.xlsx")  # Alternativa: ler ocorrências de um Excel
 
 # ---------------------------------------------------------------------------- #
 
-names(sp_toninha)    # Mostra os nomes das colunas do objeto 'sp'
-sp_toninha$country   # Exibe todos os dados baixados
-nrow(sp_toninha)     # Conta o número de linhas (registros) no dataframe
+names(sp_toninha_full)    # Mostra os nomes das colunas do objeto 'sp'
+sp_toninha_full$country   # Exibe todos os dados baixados
+nrow(sp_toninha_full)     # Conta o número de linhas (registros) no dataframe
 
 # ---------------------------------------------------------------------------- #
 
 ### Tratamento dos dados -----
-sp_toninha <- sp_toninha %>%
+sp_toninha <- sp_toninha_full %>%
   dplyr::filter(country %in% c("Brazil", "Argentina", "Uruguay")) %>%  # Mantém ocorrências nos países escolhidos
   dplyr::select(species, lon, lat)                                     # Mantém apenas colunas de interesse
 
@@ -80,35 +112,103 @@ nrow(sp_toninha)      # Conta registros após limpeza
 
 # ---------------------------------------------------------------------------- #
 
-# Carrega pacotes para visualização
-library(ggplot2)  # Pacote para gráficos
-library(maps)     # Pacote para mapas simples
-
-# Lista de países da América Latina que você quer exibir
-latam_countries <- c("Brazil", "Argentina", "Bolivia", "Chile", "Colombia",
-                     "Ecuador", "Paraguay", "Peru", "Uruguay", "Venezuela",
-                     "Guyana", "Suriname", "French Guiana")
-
-# Obtém dados do mapa mundial e filtra apenas a América Latina
-latam_map <- map_data("world") %>%
-  filter(region %in% latam_countries)
-
-# Plota o mapa da América Latina com os pontos
-g1 <- ggplot() +
-  geom_polygon(data = latam_map, aes(x = long, y = lat, group = group),
-               fill = "gray95", color = "gray60") +
-  geom_point(data = sp_toninha, aes(x = lon, y = lat),
-             color = "red", size = 2) +
+# Plot do mapa global com os pontos
+g2 <- ggplot() +
+  geom_polygon(
+    data = world_map,
+    aes(x = long, y = lat, group = group),
+    fill = "gray95",
+    color = "gray60",
+    linewidth = 0.2
+  ) +
+  geom_point(
+    data = sp_toninha,
+    aes(x = lon, y = lat),
+    color = "red",
+    size = 2
+  ) +
   coord_fixed(1.3) +
   labs(
     title = "Ocorrências de Pontoporia blainvillei",
-    x = "Longitude", y = "Latitude"
+    x = "Longitude",
+    y = "Latitude"
   ) +
   theme_minimal()
 
-g1
+g2
 
 # ---------------------------------------------------------------------------- #
+
+# 02. Obter mapa da área de estudo (shapefile) -----
+
+#install.packages("sf")
+#install.packages("sp")
+
+library(sf)        # Trabalhar com dados espaciais
+library(sp)        # Trabalhar com dados espaciais
+
+
+# Baixar Shapefile usando sf
+oceans <- st_read("shapefile/goas_v01.shp")
+
+# Baixar Shapefile usando sf
+eez <- st_read("shapefile/eez_boundaries_v12.shp")
+
+par(mfrow=c(1, 1))
+
+# Plotar o shapefile com personalizações
+plot(oceans$geometry, col = "lightblue")
+plot(eez, col = "black", add=TRUE)
+
+# Adicionar eixos
+axis(2, at = seq(-90, 90, by = 20))
+axis(1, at = seq(-180, 180, by = 20))
+
+# Definir as coordenadas de recorte
+coord_limit <- c(-90, -20, -89.975, 20)
+
+# Converter o objeto oceans de sf para sp
+oceans_sp <- as(oceans, "Spatial")
+
+# Transformar os polígonos para o sistema de coordenadas desejado
+oceans_cropped_1 <- spTransform(oceans_sp, CRS("+proj=longlat +datum=WGS84"))
+
+# Criar uma extensão usando a função extent do pacote raster
+ext_lim <- raster::extent(coord_limit[1], coord_limit[2], coord_limit[3], coord_limit[4])
+
+# Usar a função crop do pacote raster para recortar
+oceans_cropped <- raster::crop(oceans_cropped_1, ext_lim)
+
+# Converter o objeto oceans de sf para sp
+eez_sp <- as(eez, "Spatial")
+
+# Transformar os polígonos para o sistema de coordenadas desejado
+eez_cropped_1 <- spTransform(eez_sp, CRS("+proj=longlat +datum=WGS84"))
+
+# Usar a função crop do pacote raster para recortar
+eez_cropped <- raster::crop(eez_cropped_1, ext_lim)
+
+# ---------------------------------------------------------------------------- #
+
+# Plotar Shapefile recortado
+plot(oceans_cropped, col = "lightblue")
+plot(eez_cropped, add=TRUE)
+
+# Adicionar eixos y
+valores_y <- c(20, 10, 0, -10, -20, -30, -40, -50, -60, -70, -80, -90)
+axis(2, at = valores_y)
+# Adicionar eixo x
+valores_x <- c(-90, -80, -70, -60, -50, -40, -30, -20)
+axis(1, at = valores_x)
+
+points(sp_toninha$lon, sp_toninha$lat,
+       pch = 16,
+       col = "red",
+       cex = 1)
+
+# ---------------------------------------------------------------------------- #
+
+# 03. Obter dados e processar dados ambientais -----
 
 # https://www.bio-oracle.org/
 
@@ -231,3 +331,110 @@ bio <- crop(bio, oceans_cropped) # recorte da área de estudo
 bio <- mask(bio, oceans_cropped) # máscara fora da área de estudo
 
 names(bio)
+
+# ---------------------------------------------------------------------------- #
+
+# 04. Extrair valores das variáveis ambientais -----
+
+sp_toninha_coord <- subset(sp_toninha, select = -species)  # Excluir coluna "species", manter somente "lat" e "lon"
+
+nrow(sp_toninha_coord)
+
+toninha_var <- raster::extract(bio, sp_toninha_coord)
+
+nrow(toninha_var)
+summary(toninha_var)
+
+# ---------------------------------------------------------------------------- #
+
+toninha_concat <- cbind(sp_toninha_coord, toninha_var) # Concatenar "sp_toninha_coord e toninha_var"
+
+nrow(toninha_concat)
+summary(toninha_concat)
+
+# ---------------------------------------------------------------------------- #
+
+toninha_sem_na <- na.omit(toninha_concat) # Excluir NAs
+
+nrow(toninha_sem_na)
+
+# ---------------------------------------------------------------------------- #
+
+# Plotar Shapefile recortado
+plot(oceans_cropped, col = "lightblue")
+plot(eez_cropped, add=TRUE)
+
+# Adicionar eixos y
+valores_y <- c(20, 10, 0, -10, -20, -30, -40, -50, -60, -70, -80, -90)
+axis(2, at = valores_y)
+# Adicionar eixo x
+valores_x <- c(-90, -80, -70, -60, -50, -40, -30, -20)
+axis(1, at = valores_x)
+
+points(toninha_sem_na$lon, toninha_sem_na$lat,
+       pch = 16,
+       col = "red",
+       cex = 1)
+
+# ---------------------------------------------------------------------------- #
+
+# 05. Espacializar as ocorrências -----
+
+#install.packages("spThin")
+
+library(spThin)    # Realiza o "thinning" espacial, reduzindo a autocorrelação espacial em dados de ocorrência
+
+head(toninha_sem_na)
+
+### Espacialização geográfica -----
+toninha_thin <- thin(
+  loc.data = toninha_sem_na,                        # Dataframe de ocorrências filtrado
+  lat.col = "lat",                              # Coluna com latitude
+  long.col = "lon",                            # Coluna com longitude
+  spec.col = "species",                         # Coluna com o nome da espécie
+  thin.par = 30,                               # Distância mínima (km) entre pontos
+  reps = 100,                                   # Quantas vezes repetir o processo
+  locs.thinned.list.return = TRUE,              # Retorna lista com resultados de cada repetição
+  write.files = FALSE,                          # Não salva arquivos automaticamente
+  write.log.file = FALSE                        # Não cria arquivo de log
+)
+
+# Número de pontos em cada repetição
+n_locs <- sapply(toninha_thin, nrow)
+
+# Repetição com maior número de ocorrências
+toninha_thin <- toninha_thin[[which.max(n_locs)]]
+
+nrow(toninha_thin)                                             # Mostra número de registros
+nrow(sp_toninha)
+nrow(sp_toninha_full)
+
+toninha_thin                                                   # Visualiza tabela final
+str(toninha_thin)
+
+write_xlsx(
+  toninha_thin,
+  "toninha_thin.xlsx"
+)
+
+# ---------------------------------------------------------------------------- #
+
+# Plotar Shapefile recortado
+plot(oceans_cropped, col = "lightblue")
+plot(eez_cropped, add=TRUE)
+
+# Adicionar eixos y
+valores_y <- c(20, 10, 0, -10, -20, -30, -40, -50, -60, -70, -80, -90)
+axis(2, at = valores_y)
+# Adicionar eixo x
+valores_x <- c(-90, -80, -70, -60, -50, -40, -30, -20)
+axis(1, at = valores_x)
+
+points(toninha_thin$Longitude, toninha_thin$Latitude,
+       pch = 16,
+       col = "red",
+       cex = 1)
+
+# ---------------------------------------------------------------------------- #
+
+# 05. Espacializar as ocorrências -----
