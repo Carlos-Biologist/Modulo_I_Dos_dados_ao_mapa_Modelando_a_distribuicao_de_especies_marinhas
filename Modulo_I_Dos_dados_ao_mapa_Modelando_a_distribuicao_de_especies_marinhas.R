@@ -368,3 +368,159 @@ nrow(sp_toninha_full)
 # ---------------------------------------------------------------------------- #
 
 # 05. Gerar as ausências/pseudoausências -----
+
+# Converter o mapa recortado para sf
+
+toninha_pres_sf <- st_as_sf(
+  toninha_sem_na,
+  coords = c("lon", "lat"),
+  crs = 4326
+)
+
+oceans_sf <- st_as_sf(oceans_cropped)
+
+# ---------------------------------------------------------------------------- #
+
+# Sortear pontos candidatos (mais do que 111!)
+
+set.seed(123)
+
+candidatos <- st_sample(
+  oceans_sf,
+  size = 5000,        # quanto maior, melhor
+  type = "random"
+)
+
+candidatos_sf <- st_as_sf(candidatos)
+
+# ---------------------------------------------------------------------------- #
+
+# Calcular distância até os pontos de presença
+
+dist_matrix <- st_distance(candidatos_sf, toninha_pres_sf)
+
+# distância mínima de cada candidato até qualquer presença
+dist_min <- apply(dist_matrix, 1, min)
+
+# Filtrar pontos com distância ≥ 4°
+ausencias_sf <- candidatos_sf[dist_min >= 4, ]
+
+# Selecionar 120 pontos
+if (nrow(ausencias_sf) < 120) {
+  stop("Poucos pontos disponíveis. Aumente o número de candidatos.")
+}
+
+ausencias_sf <- ausencias_sf %>%
+  slice_sample(n = 120)
+
+# ---------------------------------------------------------------------------- #
+
+# Visualização final (checagem)
+plot(oceans_cropped, col = "lightblue")
+plot(eez_cropped, add = TRUE)
+
+plot(st_geometry(toninha_pres_sf), add = TRUE, col = "blue", pch = 16)
+plot(st_geometry(ausencias_sf), add = TRUE, col = "red", pch = 16)
+
+legend(
+  "bottomleft",
+  legend = c("Presença", "Ausência"),
+  col = c("blue", "red"),
+  pch = c(16, 16),
+  bty = "n"
+)
+
+# ---------------------------------------------------------------------------- #
+
+# Extrair latitude e longitude
+ausencias_df <- ausencias_sf %>%
+  st_coordinates() %>%
+  as.data.frame()
+
+colnames(ausencias_df) <- c("lon", "lat")
+
+# ---------------------------------------------------------------------------- #
+
+# Extrair valores das variaveis de ausência
+
+toninha_ausencias <- raster::extract(bio, ausencias_sf)
+
+summary(toninha_ausencias)
+str(toninha_ausencias)
+
+# ---------------------------------------------------------------------------- #
+
+# Inserir coluna "species" com valor 0 para ausência e coluna "lon" e "lat" 
+
+toninha_ausencias_df <- cbind(
+  species = 0,
+  ausencias_df[, c("lon", "lat")],
+  toninha_ausencias
+)
+
+str(toninha_ausencias_df)
+
+# ---------------------------------------------------------------------------- #
+
+toninha_ausencias_df <- na.omit(as.data.frame(toninha_ausencias_df))
+
+str(toninha_ausencias_df)
+
+# ---------------------------------------------------------------------------- #
+
+# Define semente para reprodutibilidade (opcional)
+set.seed(123)
+
+# Sorteia 5 linhas aleatórias para remover
+linhas_remover <- sample(seq_len(nrow(toninha_ausencias_df)), 5)
+
+# Remove as linhas sorteadas
+toninha_ausencias_df <- toninha_ausencias_df[-linhas_remover, ]
+
+str(toninha_ausencias_df)
+str(toninha_sem_na)
+
+colnames(toninha_ausencias_df)
+colnames(toninha_sem_na)
+
+# ---------------------------------------------------------------------------- #
+
+# Concatenar dados de presença e ausências 
+
+toninha_final <- rbind(
+  toninha_sem_na,
+  toninha_ausencias_df
+)
+
+str(toninha_final)
+
+# ---------------------------------------------------------------------------- #
+
+# Visualização base
+plot(oceans_cropped, col = "lightblue")
+plot(eez_cropped, add = TRUE)
+
+# Definir cores por presença/ausência
+cols <- ifelse(toninha_final$species == 1, "blue", "red")
+
+# Plotar pontos
+points(
+  toninha_final$lon,
+  toninha_final$lat,
+  col = cols,
+  pch = 16,
+  cex = 0.8
+)
+
+# Adicionar eixos y
+valores_y <- c(20, 10, 0, -10, -20, -30, -40, -50, -60, -70, -80, -90)
+axis(2, at = valores_y)
+# Adicionar eixo x
+valores_x <- c(-90, -80, -70, -60, -50, -40, -30, -20)
+axis(1, at = valores_x)
+
+# ---------------------------------------------------------------------------- #
+write_xlsx(
+  toninha_final,
+  path = "dados_toninha_final.xlsx"
+)
