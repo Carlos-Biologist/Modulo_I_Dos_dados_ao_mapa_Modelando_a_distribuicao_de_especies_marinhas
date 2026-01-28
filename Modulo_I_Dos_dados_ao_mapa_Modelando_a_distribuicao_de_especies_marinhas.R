@@ -38,6 +38,7 @@ options(scipen = 999) # remover notação científica dos dados
 # install.packages("sf")         # Manipulação moderna de dados espaciais vetoriais (shapefiles, geopackages)
 # install.packages("sp")         # Estruturas clássicas de dados espaciais (SpatialPoints, SpatialPolygons)
 # install.packages("readxl")     # Leitura de arquivos Excel (.xls e .xlsx)
+# install.packages("writexl")    # Escrita de arquivos Excel (.xlsx)
 
 library(raster)    
 library(tidyverse) 
@@ -148,7 +149,7 @@ axis(2, at = seq(-90, 90, by = 20))
 axis(1, at = seq(-180, 180, by = 20))
 
 # Definir as coordenadas de recorte
-coord_limit <- c(-90, -20, -89.975, 20)
+coord_limit <- c(-70, -35, -60, -10)
 
 # Converter o objeto oceans de sf para sp
 oceans_sp <- as(oceans, "Spatial")
@@ -178,10 +179,10 @@ plot(oceans_cropped, col = "lightblue")
 plot(eez_cropped, add=TRUE)
 
 # Adicionar eixos y
-valores_y <- c(20, 10, 0, -10, -20, -30, -40, -50, -60, -70, -80, -90)
+valores_y <- c(-10, -15, -20, -25, -30, -35, -40, -45, -50, -55, -60)
 axis(2, at = valores_y)
 # Adicionar eixo x
-valores_x <- c(-90, -80, -70, -60, -50, -40, -30, -20)
+valores_x <- c(-70, -65, -60, -55, -50, -45, -40, -35)
 axis(1, at = valores_x)
 
 points(sp_toninha$lon, sp_toninha$lat,
@@ -230,7 +231,7 @@ info_layer("terrain_characteristics")
 time_bathy = c('1970-01-01T00:00:00Z', '1970-01-01T00:00:00Z')  # Intervalo temporal da batimetria - variável estática, sem variação temporal real
 time = c('2000-01-01T00:00:00Z', '2000-01-01T00:00:00Z')        # Intervalo temporal das variáveis ambientais
 latitude = c(-89.975, 20)                                       # Domínio espacial Sul global até 20°N
-longitude = c(-90, 20)                                          # Domínio espacial 90°W até 20°E
+longitude = c(-70, 20)                                          # Domínio espacial 90°W até 20°E
 
 # Listas de restrições (constraints) para consulta de dados.
 
@@ -334,6 +335,7 @@ summary(toninha_concat)
 toninha_sem_na <- na.omit(toninha_concat) # Excluir NAs
 
 nrow(toninha_sem_na)
+str(toninha_sem_na)
 
 write_xlsx(
   toninha_sem_na,
@@ -355,7 +357,7 @@ plot(eez_cropped, add=TRUE)
 valores_y <- c(20, 10, 0, -10, -20, -30, -40, -50, -60, -70, -80, -90)
 axis(2, at = valores_y)
 # Adicionar eixo x
-valores_x <- c(-90, -80, -70, -60, -50, -40, -30, -20)
+valores_x <- c(-70, -60, -50, -40, -30, -20)
 axis(1, at = valores_x)
 
 points(toninha_sem_na$lon, toninha_sem_na$lat,
@@ -520,7 +522,7 @@ points(
 valores_y <- c(20, 10, 0, -10, -20, -30, -40, -50, -60, -70, -80, -90)
 axis(2, at = valores_y)
 # Adicionar eixo x
-valores_x <- c(-90, -80, -70, -60, -50, -40, -30, -20)
+valores_x <- c(-70, -60, -50, -40, -30, -20)
 axis(1, at = valores_x)
 
 # ---------------------------------------------------------------------------- #
