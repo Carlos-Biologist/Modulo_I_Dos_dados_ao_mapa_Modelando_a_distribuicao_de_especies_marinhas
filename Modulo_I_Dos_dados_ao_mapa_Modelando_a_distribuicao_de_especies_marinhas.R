@@ -24,14 +24,35 @@ options(scipen = 999) # remover notação científica dos dados
 # ---------------------------------------------------------------------------- #
 # ---------------------------------------------------------------------------- #
 
-#install.packages("raster")
-#install.packages("tidyverse")
-#install.packages("dplyr")
-#install.packages("dismo")
+#Carregar pacotes
 
-library(raster)    # Manipulação, análise e visualização de dados espaciais no formato raster
-library(tidyverse) # Conjunto de pacotes para manipulação, visualização e análise de dados (ggplot2, dplyr, tidyr, etc.)
-library(dplyr)     # Manipulação de dados (selecionar colunas, filtrar linhas, criar variáveis, agrupar, sumarizar)
+# install.packages("raster")     # Leitura, manipulação, análise e visualização de dados raster (camadas ambientais, mapas contínuos, etc.)
+# install.packages("tidyverse")  # Conjunto de pacotes para ciência de dados (dplyr, tidyr, ggplot2, readr, etc.)
+# install.packages("dplyr")      # Manipulação de dados tabulares: filtrar, selecionar, criar variáveis e resumir dados
+# install.packages("dismo")      # Ferramentas para modelagem de distribuição de espécies (SDM),
+# install.packages("psych")      # Funções estatísticas exploratórias, incluindo correlação, análise de colinearidade e PCA
+# install.packages("devtools")   # Ferramentas para desenvolvimento e instalação de pacote
+# library(devtools)
+# devtools::install_github("biomodhub/biomod2", dependencies = TRUE)  # Instalação do biomod2 diretamente do GitHub
+# devtools::install_github("bio-oracle/biooracler")  # Interface para acessar dados ambientais marinhos do Bio-ORACLE
+# install.packages("sf")         # Manipulação moderna de dados espaciais vetoriais (shapefiles, geopackages)
+# install.packages("sp")         # Estruturas clássicas de dados espaciais (SpatialPoints, SpatialPolygons)
+# install.packages("readxl")     # Leitura de arquivos Excel (.xls e .xlsx)
+
+library(raster)    
+library(tidyverse) 
+library(dplyr)     
+library(psych)     
+library(biomod2)
+library(ggplot2)
+library(maps)
+library(sf)        
+library(sp)        
+library(biooracler)
+library(writexl)   
+library(readxl)
+
+# ---------------------------------------------------------------------------- #
 
 pal1 <- c("#3E49BB", "#3498DB", "yellow", "orange", "red", "darkred") # paleta de cores
 
@@ -49,10 +70,6 @@ sp_toninha_full <- dismo::gbif(
 )
 
 # ---------------------------------------------------------------------------- #
-
-# Carrega pacotes
-library(ggplot2)
-library(maps)
 
 # Dados do mapa mundial (sem filtro)
 world_map <- map_data("world")
@@ -113,13 +130,6 @@ nrow(sp_toninha)      # Conta registros após limpeza
 # ---------------------------------------------------------------------------- #
 
 # 02. Obter mapa da área de estudo (shapefile) -----
-
-#install.packages("sf")
-#install.packages("sp")
-
-library(sf)        # Trabalhar com dados espaciais
-library(sp)        # Trabalhar com dados espaciais
-
 
 # Baixar Shapefile usando sf
 oceans <- st_read("shapefile/goas_v01.shp")
@@ -184,12 +194,6 @@ points(sp_toninha$lon, sp_toninha$lat,
 # 03. Obter dados e processar dados ambientais -----
 
 # https://www.bio-oracle.org/
-
-#install.packages("devtools")
-#devtools::install_github("bio-oracle/biooracler")
-
-library(biooracler)
-library(writexl)     # Salvar arquivos .xlsx
 
 # ---------------------------------------------------------------------------- #
 
@@ -530,10 +534,6 @@ write_xlsx(
 
 # 06. Verificar colinearidade -----
 
-#install.packages("psych")
-
-library(psych) # Colinearidade
-
 toninha_colin <- toninha_final %>%
   dplyr::select(-phyc_mean, -no3_mean, -po4_mean, -o2_mean, -ph_mean, -dfe_mean)
 
@@ -545,12 +545,7 @@ pairs.panels(
 
 # ---------------------------------------------------------------------------- #
 
-# 07. Verificar colinearidade -----
-
-#library(devtools)
-#devtools::install_github("biomodhub/biomod2", dependencies = TRUE)
-
-library(biomod2)
+# 07. Rodar SDM Biomod2 -----
 
 # https://cran.r-project.org/web/packages/biomod2/biomod2.pdf
 
