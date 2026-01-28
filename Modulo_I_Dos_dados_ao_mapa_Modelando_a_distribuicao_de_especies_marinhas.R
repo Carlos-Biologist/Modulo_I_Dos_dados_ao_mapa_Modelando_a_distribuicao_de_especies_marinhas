@@ -230,8 +230,8 @@ info_layer("terrain_characteristics")
 
 time_bathy = c('1970-01-01T00:00:00Z', '1970-01-01T00:00:00Z')  # Intervalo temporal da batimetria - variável estática, sem variação temporal real
 time = c('2000-01-01T00:00:00Z', '2000-01-01T00:00:00Z')        # Intervalo temporal das variáveis ambientais
-latitude = c(-89.975, 20)                                       # Domínio espacial Sul global até 20°N
-longitude = c(-70, 20)                                          # Domínio espacial 90°W até 20°E
+latitude = c(-60,-10)                                       # Domínio espacial Sul global até 20°N
+longitude = c(-70, -35)                                          # Domínio espacial 90°W até 20°E
 
 # Listas de restrições (constraints) para consulta de dados.
 
@@ -314,27 +314,27 @@ names(bio)
 
 # 04. Extrair valores das variáveis ambientais -----
 
+names(sp_toninha)
+nrow(sp_toninha)
+
 sp_toninha_coord <- subset(sp_toninha, select = -species)  # Excluir coluna "species", manter somente "lat" e "lon"
 
-nrow(sp_toninha_coord)
+names(sp_toninha_coord)
 
-toninha_var <- raster::extract(bio, sp_toninha_coord)
+toninha_var <- raster::extract(bio, sp_toninha_coord)      # Extrair valores das variáveis ambientais
 
-nrow(toninha_var)
 summary(toninha_var)
 
 # ---------------------------------------------------------------------------- #
 
 toninha_concat <- cbind(sp_toninha_coord, toninha_var) # Concatenar "sp_toninha_coord e toninha_var"
 
-nrow(toninha_concat)
 summary(toninha_concat)
 
 # ---------------------------------------------------------------------------- #
 
 toninha_sem_na <- na.omit(toninha_concat) # Excluir NAs
 
-nrow(toninha_sem_na)
 str(toninha_sem_na)
 
 write_xlsx(
@@ -345,7 +345,7 @@ write_xlsx(
 # ---------------------------------------------------------------------------- #
 
 # Remove os dois pontos indesejados
-toninha_sem_na <- toninha_sem_na[-c(103, 107), ]
+toninha_sem_na <- toninha_sem_na[-c(106), ]
 
 # ---------------------------------------------------------------------------- #
 
@@ -354,10 +354,10 @@ plot(oceans_cropped, col = "lightblue")
 plot(eez_cropped, add=TRUE)
 
 # Adicionar eixos y
-valores_y <- c(20, 10, 0, -10, -20, -30, -40, -50, -60, -70, -80, -90)
+valores_y <- c(-10, -15, -20, -25, -30, -35, -40, -45, -50, -55, -60)
 axis(2, at = valores_y)
 # Adicionar eixo x
-valores_x <- c(-70, -60, -50, -40, -30, -20)
+valores_x <- c(-70, -65, -60, -55, -50, -45, -40, -35)
 axis(1, at = valores_x)
 
 points(toninha_sem_na$lon, toninha_sem_na$lat,
@@ -408,8 +408,8 @@ dist_matrix <- st_distance(candidatos_sf, toninha_pres_sf)
 # distância mínima de cada candidato até qualquer presença
 dist_min <- apply(dist_matrix, 1, min)
 
-# Filtrar pontos com distância ≥ 4°
-ausencias_sf <- candidatos_sf[dist_min >= 4, ]
+# Filtrar pontos com distância ≥ 2°
+ausencias_sf <- candidatos_sf[dist_min >= 2, ]
 
 # Selecionar 120 pontos
 if (nrow(ausencias_sf) < 120) {
@@ -428,13 +428,12 @@ plot(eez_cropped, add = TRUE)
 plot(st_geometry(toninha_pres_sf), add = TRUE, col = "blue", pch = 16)
 plot(st_geometry(ausencias_sf), add = TRUE, col = "red", pch = 16)
 
-legend(
-  "bottomleft",
-  legend = c("Presença", "Ausência"),
-  col = c("blue", "red"),
-  pch = c(16, 16),
-  bty = "n"
-)
+# Adicionar eixos y
+valores_y <- c(-10, -15, -20, -25, -30, -35, -40, -45, -50, -55, -60)
+axis(2, at = valores_y)
+# Adicionar eixo x
+valores_x <- c(-70, -65, -60, -55, -50, -45, -40, -35)
+axis(1, at = valores_x)
 
 # ---------------------------------------------------------------------------- #
 
@@ -452,7 +451,6 @@ colnames(ausencias_df) <- c("lon", "lat")
 toninha_ausencias <- raster::extract(bio, ausencias_sf)
 
 summary(toninha_ausencias)
-str(toninha_ausencias)
 
 # ---------------------------------------------------------------------------- #
 
@@ -468,9 +466,9 @@ str(toninha_ausencias_df)
 
 # ---------------------------------------------------------------------------- #
 
-toninha_ausencias_df <- na.omit(as.data.frame(toninha_ausencias_df))
+#toninha_ausencias_df <- na.omit(as.data.frame(toninha_ausencias_df))
 
-str(toninha_ausencias_df)
+#str(toninha_ausencias_df)
 
 # ---------------------------------------------------------------------------- #
 
@@ -478,20 +476,31 @@ str(toninha_ausencias_df)
 set.seed(123)
 
 # Sorteia 5 linhas aleatórias para remover
-linhas_remover <- sample(seq_len(nrow(toninha_ausencias_df)), 5)
+linhas_remover <- sample(seq_len(nrow(toninha_ausencias_df)), 9)
 
 # Remove as linhas sorteadas
 toninha_ausencias_df <- toninha_ausencias_df[-linhas_remover, ]
 
 str(toninha_ausencias_df)
-str(toninha_sem_na)
+
+# ---------------------------------------------------------------------------- #
+
+# Concatenar dados de presença e ausências 
+
+colnames(toninha_ausencias_df)
+colnames(toninha_sem_na)
+
+# Inserir coluna "species" com valor 0 para ausência e coluna "lon" e "lat" 
+
+toninha_sem_na <- cbind(
+  species = 1,
+  toninha_sem_na
+)
 
 colnames(toninha_ausencias_df)
 colnames(toninha_sem_na)
 
 # ---------------------------------------------------------------------------- #
-
-# Concatenar dados de presença e ausências 
 
 toninha_final <- rbind(
   toninha_sem_na,
@@ -519,10 +528,10 @@ points(
 )
 
 # Adicionar eixos y
-valores_y <- c(20, 10, 0, -10, -20, -30, -40, -50, -60, -70, -80, -90)
+valores_y <- c(-10, -15, -20, -25, -30, -35, -40, -45, -50, -55, -60)
 axis(2, at = valores_y)
 # Adicionar eixo x
-valores_x <- c(-70, -60, -50, -40, -30, -20)
+valores_x <- c(-70, -65, -60, -55, -50, -45, -40, -35)
 axis(1, at = valores_x)
 
 # ---------------------------------------------------------------------------- #
@@ -537,7 +546,7 @@ write_xlsx(
 # 06. Verificar colinearidade -----
 
 toninha_colin <- toninha_final %>%
-  dplyr::select(-phyc_mean, -no3_mean, -po4_mean, -o2_mean, -ph_mean, -dfe_mean)
+  dplyr::select(-species, -lon, -lat, -phyc_mean, -no3_mean, -po4_mean, -o2_mean, -ph_mean, -dfe_mean, -si_mean)
 
 pairs.panels(
   toninha_colin,
@@ -558,7 +567,7 @@ pairs.panels(
 toninha_final <- read_xlsx("dados_toninha_final.xlsx")
 
 toninha_colin <- toninha_final %>%
-  dplyr::select(-phyc_mean, -no3_mean, -po4_mean, -o2_mean, -ph_mean, -dfe_mean)
+  dplyr::select(, -phyc_mean, -no3_mean, -po4_mean, -o2_mean, -ph_mean, -dfe_mean, -si_mean)
 
 # Checagens básicas
 str(toninha_colin)
@@ -578,8 +587,7 @@ myRespXY <- toninha_colin[, c("lon", "lat")]
 # Dados ambientais -----
 
 # Empilhar os RasterLayer em um RasterStack
-bio_colin <- stack(chl_surf_raster, mld_surf_raster, tsm_surf_raster, sal_surf_raster, swd_surf_raster, sws_surf_raster, 
-             bathy_raster, silicate_surf_raster)
+bio_colin <- stack(chl_surf_raster, mld_surf_raster, tsm_surf_raster, sal_surf_raster, swd_surf_raster, sws_surf_raster, bathy_raster)
 
 # Converter Brick → Stack
 bio_colin <- raster::stack(bio_colin)
@@ -623,7 +631,7 @@ toninha_model <- BIOMOD_Modeling(
   modeling.id = 'AllModels',
   models      = c('GAM','GLM','RF','XGBOOST'),
   CV.strategy = 'block',    # validação cruzada espacial (em blocos)
-  CV.perc     = 0.8,
+  CV.perc     = 0.7,
   OPT.strategy = 'default',
   metric.eval = c('TSS','AUCroc'),
   var.import  = 3,
@@ -657,7 +665,7 @@ mean_var_imp <- mean_var_imp[order(mean_var_imp$var.imp, decreasing = TRUE), ]
 
 # Gera o gráfico de barras invertido
 barplot(mean_var_imp$var.imp, names.arg = mean_var_imp$expl.var, 
-        xlab = "Variáveis Explicativas", ylab = "Importãncia",
+        xlab = "Variáveis Explicativas", ylab = "Importância",
         col = "blue")
 
 # ---------------------------------------------------------------------------- #
@@ -682,12 +690,12 @@ toninha_ens <- BIOMOD_EnsembleModeling(
   em.by = "all",
   em.algo = c('EMmean'),
   metric.select = c('TSS'),
-  metric.select.thresh = 0.8,
-  metric.eval = c("TSS", "AUCroc"),
-  var.import = 11,
+  metric.select.thresh = c(0.8),
+  metric.eval = c("TSS"),
+  var.import = 5,
   EMci.alpha = 0.05,
   EMwmean.decay = "proportional",
-  nb.cpu = 2,
+  nb.cpu = 1,
   seed.val = 123,
   do.progress = TRUE,
 )
